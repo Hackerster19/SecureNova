@@ -3,11 +3,11 @@ from urllib.parse import urlencode
 
 from flask import (
     Flask, redirect, url_for, session,
-    request, render_template_string
+    request, render_template,abort
 )
 
 from dotenv import load_dotenv
-from auth import configure_oauth
+from auth import configure_oauth, require_permission,validate_access_token
 
 load_dotenv()
 
@@ -44,11 +44,14 @@ def home():
 
 @app.route("/login")
 def login():
-    redirect_uri = url_for("callback", _external=True)
+    APP_BASE_URL = os.getenv("APP_BASE_URL").rstrip("/")
 
+    redirect_uri = f"{APP_BASE_URL}/callback"
     return oauth.auth0.authorize_redirect(
         redirect_uri,
-        code_challenge_method="S256"
+        audience=os.getenv("AUTH0_AUDIENCE"),
+        code_challenge_method="S256",
+        prompt="login"
     )
 
 
@@ -64,32 +67,45 @@ def callback():
             nonce=session.get("auth0_nonce")
         )
 
+    if not user_info:
+        abort(401)
+
+    # Validate Auth0 access token
+    access_token = token.get("access_token")
+    
+
+    try:
+     access_token_payload = validate_access_token(access_token)
+     print("TOKEN CLAIMS:", list(access_token_payload.keys()))
+     print("USER PERMISSIONS:", access_token_payload.get("permissions", []))
+    except Exception as e:
+     print("TOKEN VALIDATION ERROR:", str(e))
+     abort(401)
+
+# Extract RBAC permissions
+    user_info["permissions"] = access_token_payload.get("permissions", [])
+    # Store authenticated user information
     session["user"] = dict(user_info)
 
+    
+    
+
     return redirect(url_for("dashboard"))
-
-
 @app.route("/dashboard")
+@require_permission("read:ai-data")
 def dashboard():
     user = session.get("user")
 
     if not user:
         return redirect(url_for("login"))
 
-    return render_template_string("""
-        <h1>Welcome to SecureNova!</h1>
-        <p>Authenticated successfully through Auth0.</p>
-        <p>User: {{ user.get('name', 'User') }}</p>
-        <p>Email: {{ user.get('email', 'Not available') }}</p>
-        <a href="/logout">Logout</a>
-    """, user=user)
-
+    return render_template("dashboard.html", user=user)
 
 @app.route("/logout")
 def logout():
     session.clear()
 
-    return_to = request.url_root.rstrip("/")
+    return_to = os.getenv("APP_BASE_URL").rstrip("/")
 
     logout_url = (
         f"https://{AUTH0_DOMAIN}/v2/logout?"
@@ -101,6 +117,29 @@ def logout():
 
     return redirect(logout_url)
 
+@app.route("/chat", methods=["POST"])
+def chat():
+    auth_header = request.headers.get("Authorization", "")
+
+    if not auth_header.startswith("Bearer "):
+        return {"error": "Missing or invalid token"}, 401
+
+    access_token = auth_header.split(" ", 1)[1]
+
+    try:
+        payload = validate_access_token(access_token)
+    except Exception:
+        return {"error": "Invalid or expired token"}, 401
+
+    permissions = payload.get("permissions", [])
+
+    if "read:ai-data" not in permissions:
+        return {"error": "Insufficient permissions"}, 403
+
+    return {
+        "message": "Authenticated request successful",
+        "agent_id": payload.get("https://securenova.ai/agent_id")
+    }, 200
 
 if __name__ == "__main__":
     app.run(
