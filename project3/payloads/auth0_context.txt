@@ -1,0 +1,7 @@
+APPLICATION_NAME=LLM Security Demo
+
+AUTH0_DOMAIN=dev-34tdrz3ndxfzxl4f.us.auth0.com
+
+AUTH0_CLIENT_ID=G1kK23Rzx1FmMHNrGNME5HVsJvmoV4ll
+
+AUTH0_ACCESS_TOKEN=demo access token
