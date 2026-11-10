@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Assistant</title>
+</head>
+<body>
+
+<h1>AI Assistant</h1>
+
+<form method="POST">
+
+<textarea name="question" rows="5" cols="60"></textarea>
+
+<br><br>
+
+<button type="submit">Ask</button>
+
+</form>
+
+{% if response %}
+
+<h2>Response</h2>
+
+<pre>{{ response }}</pre>
+
+{% endif %}
+
+</body>
+</html>
