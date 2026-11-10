@@ -1,0 +1,1 @@
+This contains the screenshots necessary for the project
